@@ -1,0 +1,59 @@
+// 这是 src/vs/code/electron-main/main.ts 文件中需要添加的代码示例
+
+// 1. 在文件顶部的导入部分添加以下导入语句：
+import { autoUpdater } from 'electron-updater';
+import * as log from 'electron-log';
+
+// 2. 在 CodeMain 类中添加以下方法：
+private setupAutoUpdater(): void {
+    // 配置日志
+    autoUpdater.logger = log;
+    (autoUpdater.logger as any).transports.file.level = 'info';
+    
+    // 设置更新服务器地址
+    autoUpdater.setFeedURL({
+        provider: 'generic',
+        url: process.env.UPDATE_SERVER_URL || 'http://localhost:3000'
+    });
+    
+    // 监听更新事件
+    autoUpdater.on('checking-for-update', () => {
+        log.info('正在检查更新...');
+    });
+    
+    autoUpdater.on('update-available', (info) => {
+        log.info('发现新版本:', info.version);
+    });
+    
+    autoUpdater.on('update-not-available', (info) => {
+        log.info('当前已是最新版本:', info.version);
+    });
+    
+    autoUpdater.on('error', (err) => {
+        log.error('更新检查失败:', err);
+    });
+    
+    autoUpdater.on('download-progress', (progressObj) => {
+        let log_message = "下载速度: " + progressObj.bytesPerSecond;
+        log_message = log_message + ' - 已下载 ' + progressObj.percent + '%';
+        log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+        log.info(log_message);
+    });
+    
+    autoUpdater.on('update-downloaded', (info) => {
+        log.info('更新下载完成，准备安装:', info.version);
+        // 可以在这里显示通知或对话框
+        // autoUpdater.quitAndInstall();
+    });
+    
+    // 启动时检查更新
+    setTimeout(() => {
+        autoUpdater.checkForUpdatesAndNotify();
+    }, 3000); // 延迟3秒检查，确保应用完全启动
+}
+
+// 3. 在 startup() 方法中，找到 this.lifecycleMainService.ready(); 这一行，在其后添加：
+// 初始化自动更新
+this.setupAutoUpdater();
+
+// 注意：以上代码需要根据实际的 main.ts 文件结构进行调整和集成

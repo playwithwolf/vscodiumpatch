@@ -1,0 +1,28 @@
+{
+  "nameShort": "VSCodium",
+  "nameLong": "VSCodium",
+  "applicationName": "vscodium",
+  "dataFolderName": ".vscodium",
+  "win32MutexName": "vscodium",
+  "licenseFileName": "LICENSE",
+  "updateUrl": "http://localhost:3000",
+  "quality": "stable",
+  "extensionsGallery": {
+    "serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
+    "cacheUrl": "https://vscode.blob.core.windows.net/gallery/index",
+    "itemUrl": "https://marketplace.visualstudio.com/items"
+  },
+  "extensionTips": {
+    "ms-vscode.vscode-typescript-next": false
+  },
+  "configBasedExtensionTips": {},
+  "extensionImportantTips": {},
+  "extensionKeywords": [],
+  "keybindingsRegistry": [],
+  "languages": [],
+  "grammars": [],
+  "themes": [],
+  "iconThemes": [],
+  "snippets": [],
+  "jsonValidation": []
+}

@@ -1,0 +1,80 @@
+--- a/src/vs/code/electron-main/main.ts
++++ b/src/vs/code/electron-main/main.ts
+@@ -25,6 +25,8 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instant
+ import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
+ import { SyncDescriptor } from 'vs/platform/instantiation/common/descriptors';
+ import { ILoggerService } from 'vs/platform/log/common/log';
++import { autoUpdater } from 'electron-updater';
++import * as log from 'electron-log';
+ 
+ /**
+  * The main VS Code application. There will only ever be one instance,
+@@ -89,6 +91,9 @@ export class CodeMain {
+ 		// Lifecycle
+ 		this.lifecycleMainService.ready();
+ 
++		// Initialize auto updater
++		this.setupAutoUpdater();
++
+ 		// Set lifecycle phase to `Ready`
+ 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
+ 
+@@ -96,6 +101,58 @@ export class CodeMain {
+ 		return this.instantiationService;
+ 	}
+ 
++	private setupAutoUpdater(): void {
++		// Configure logging
++		autoUpdater.logger = log;
++		(autoUpdater.logger as any).transports.file.level = 'info';
++		
++		// Set update server URL
++		const updateUrl = process.env.UPDATE_SERVER_URL || this.productService.updateUrl || 'http://localhost:3000';
++		autoUpdater.setFeedURL({
++			provider: 'generic',
++			url: updateUrl
++		});
++		
++		// Listen for update events
++		autoUpdater.on('checking-for-update', () => {
++			log.info('Checking for updates...');
++		});
++		
++		autoUpdater.on('update-available', (info) => {
++			log.info('Update available:', info.version);
++		});
++		
++		autoUpdater.on('update-not-available', (info) => {
++			log.info('Update not available, current version:', info.version);
++		});
++		
++		autoUpdater.on('error', (err) => {
++			log.error('Auto updater error:', err);
++		});
++		
++		autoUpdater.on('download-progress', (progressObj) => {
++			let logMessage = `Download speed: ${progressObj.bytesPerSecond}`;
++			logMessage += ` - Downloaded ${progressObj.percent}%`;
++			logMessage += ` (${progressObj.transferred}/${progressObj.total})`;
++			log.info(logMessage);
++		});
++		
++		autoUpdater.on('update-downloaded', (info) => {
++			log.info('Update downloaded, ready to install:', info.version);
++			// You can show notification or dialog here
++			// autoUpdater.quitAndInstall();
++		});
++		
++		// Check for updates on startup (delayed to ensure app is fully loaded)
++		setTimeout(() => {
++			if (this.productService.quality !== 'development') {
++				autoUpdater.checkForUpdatesAndNotify().catch(err => {
++					log.error('Failed to check for updates:', err);
++				});
++			}
++		}, 5000); // Delay 5 seconds to ensure app is fully started
++	}
++
+ 	private dispose(): void {
+ 
+ 		// Dispose of the application and main services
