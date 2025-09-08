@@ -1,15 +1,16 @@
 --- a/src/vs/code/electron-main/main.ts
 +++ b/src/vs/code/electron-main/main.ts
-@@ -27,6 +27,8 @@
+@@ -27,6 +27,9 @@
  import { connect as nodeIPCConnect, serve as nodeIPCServe, Server as NodeIPCServer, XDG_RUNTIME_DIR } from '../../base/parts/ipc/node/ipc.net.js';
  import { CodeApplication } from './app.js';
  import { localize } from '../../nls.js';
 +import { autoUpdater } from 'electron-updater';
 +import * as log from 'electron-log';
++import type { UpdateInfo, ProgressInfo } from 'electron-updater';
  import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
  import { ConfigurationService } from '../../platform/configuration/common/configurationService.js';
  import { IDiagnosticsMainService } from '../../platform/diagnostics/electron-main/diagnosticsMainService.js';
-@@ -87,6 +89,8 @@
+@@ -87,6 +90,8 @@
  	main(): void {
  		try {
  			this.startup();
@@ -18,47 +19,45 @@
  		} catch (error) {
  			console.error(error.message);
  			app.exit(1);
-@@ -614,6 +618,59 @@
+@@ -615,6 +620,49 @@
  		return segments.join(':');
  	}
  
 +	private setupAutoUpdater(): void {
-+		// Configure logging
++		// Configure electron-log for auto-updater
++		log.transports.file.level = 'info';
 +		autoUpdater.logger = log;
-+		(autoUpdater.logger as any).transports.file.level = 'info';
 +		
 +		// Set update server URL
-+		const updateUrl = process.env.UPDATE_SERVER_URL || 'http://localhost:3000';
 +		autoUpdater.setFeedURL({
 +			provider: 'generic',
-+			url: updateUrl
++			url: 'http://192.168.0.3:3000'
 +		});
 +		
-+		// Listen for update events
 +		autoUpdater.on('checking-for-update', () => {
 +			log.info('Checking for updates...');
 +		});
 +		
-+		autoUpdater.on('update-available', (info) => {
++		autoUpdater.on('update-available', (info: UpdateInfo) => {
 +			log.info('Update available:', info.version);
 +		});
 +		
-+		autoUpdater.on('update-not-available', (info) => {
++		autoUpdater.on('update-not-available', (info: UpdateInfo) => {
 +			log.info('Update not available, current version:', info.version);
 +		});
 +		
-+		autoUpdater.on('error', (err) => {
++		autoUpdater.on('error', (err: Error) => {
 +			log.error('Auto updater error:', err);
 +		});
 +		
-+		autoUpdater.on('download-progress', (progressObj) => {
++		autoUpdater.on('download-progress', (progressObj: ProgressInfo) => {
 +			let logMessage = `Download speed: ${progressObj.bytesPerSecond}`;
 +			logMessage += ` - Downloaded ${progressObj.percent}%`;
 +			logMessage += ` (${progressObj.transferred}/${progressObj.total})`;
 +			log.info(logMessage);
 +		});
 +		
-+		autoUpdater.on('update-downloaded', (info) => {
++		autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
 +			log.info('Update downloaded, ready to install:', info.version);
 +			// You can show notification or dialog here
 +			// autoUpdater.quitAndInstall();
@@ -68,7 +67,7 @@
 +		setTimeout(() => {
 +			// Only check for updates in production builds
 +			if (process.env.NODE_ENV !== 'development') {
-+				autoUpdater.checkForUpdatesAndNotify().catch(err => {
++				autoUpdater.checkForUpdatesAndNotify().catch((err: Error) => {
 +					log.error('Failed to check for updates:', err);
 +				});
 +			}
