@@ -22,7 +22,7 @@ UPDATE_SERVER_URL="http://192.168.0.3:3000"
 
 # ===== 版本配置 =====
 # 自定义版本号（留空则使用原版本号）
-CUSTOM_VERSION="1.0.0"
+CUSTOM_VERSION=""
 
 # ===== 依赖版本配置 =====
 # electron-updater 版本

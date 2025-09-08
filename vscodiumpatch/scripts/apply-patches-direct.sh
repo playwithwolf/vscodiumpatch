@@ -102,6 +102,40 @@ apply_package_json_patch() {
     fi
 }
 
+# 更新 package.json 中的 version 字段
+update_package_version() {
+    log "更新 package.json 版本号..."
+    local package_json="$VSCODE_SOURCE_PATH/package.json"
+    local custom_version="$CUSTOM_VERSION"
+    
+    # 如果没有设置自定义版本，跳过版本更新
+    if [[ -z "$custom_version" ]]; then
+        log "未设置 CUSTOM_VERSION，跳过版本更新"
+        return 0
+    fi
+    
+    if [[ ! -f "$package_json" ]]; then
+        log "❌ 错误: package.json 不存在: $package_json"
+        return 1
+    fi
+    
+    # 检查是否已经是目标版本
+    if grep -q "\"version\": \"$custom_version\"" "$package_json"; then
+        log "⚠️  package.json 版本已是 $custom_version，跳过"
+        return 0
+    fi
+    
+    # 使用 sed 替换 version 字段
+    if sed -i.tmp "s/\"version\": \"[^\"]*\"/\"version\": \"$custom_version\"/g" "$package_json"; then
+        rm -f "$package_json.tmp" 2>/dev/null || true
+        log "✅ package.json 版本更新成功: $custom_version"
+        return 0
+    else
+        log "❌ package.json 版本更新失败"
+        return 1
+    fi
+}
+
 # 应用 product.json 补丁
 apply_product_json_patch() {
     log "应用 product.json 补丁..."
@@ -191,6 +225,9 @@ main() {
     if apply_package_json_patch; then
         success_count=$((success_count + 1))
     fi
+    
+    # 更新 package.json 版本号
+    update_package_version
     
     if apply_product_json_patch; then
         success_count=$((success_count + 1))
