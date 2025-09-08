@@ -1,7 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # VSCodium Electron-Updater 集成脚本
-# 适用于 Linux/macOS
+# 适用于所有平台 (Linux/macOS/Windows)
+# 可在 prepare_vscode.sh 中调用
 # =============================================================================
 
 set -e
@@ -47,9 +48,10 @@ check_requirements() {
 check_source_path() {
     log "检查源码路径: $VSCODE_SOURCE_PATH"
     
+    # 如果未设置路径，使用当前目录
     if [[ -z "$VSCODE_SOURCE_PATH" ]] || [[ "$VSCODE_SOURCE_PATH" == "/path/to/vscode" ]]; then
-        log "❌ 错误: 请在 config.sh 中设置正确的 VSCODE_SOURCE_PATH"
-        exit 1
+        VSCODE_SOURCE_PATH="$(pwd)"
+        log "使用当前目录作为源码路径: $VSCODE_SOURCE_PATH"
     fi
     
     if [[ ! -d "$VSCODE_SOURCE_PATH" ]]; then
@@ -57,8 +59,10 @@ check_source_path() {
         exit 1
     fi
     
-    if [[ ! -d "$VSCODE_SOURCE_PATH/.git" ]]; then
-        log "❌ 错误: 不是 Git 仓库: $VSCODE_SOURCE_PATH"
+    # 检查是否为 VSCode 源码目录（检查关键文件）
+    if [[ ! -f "$VSCODE_SOURCE_PATH/package.json" ]] || [[ ! -f "$VSCODE_SOURCE_PATH/product.json" ]]; then
+        log "❌ 错误: 不是有效的 VSCode 源码目录: $VSCODE_SOURCE_PATH"
+        log "请确保目录包含 package.json 和 product.json 文件"
         exit 1
     fi
     

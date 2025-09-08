@@ -1,26 +1,25 @@
 --- a/src/vs/code/electron-main/main.ts
 +++ b/src/vs/code/electron-main/main.ts
-@@ -25,6 +25,8 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instant
- import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
- import { SyncDescriptor } from 'vs/platform/instantiation/common/descriptors';
- import { ILoggerService } from 'vs/platform/log/common/log';
+@@ -27,6 +27,8 @@
+ import { connect as nodeIPCConnect, serve as nodeIPCServe, Server as NodeIPCServer, XDG_RUNTIME_DIR } from '../../base/parts/ipc/node/ipc.net.js';
+ import { CodeApplication } from './app.js';
+ import { localize } from '../../nls.js';
 +import { autoUpdater } from 'electron-updater';
 +import * as log from 'electron-log';
- 
- /**
-  * The main VS Code application. There will only ever be one instance,
-@@ -89,6 +91,9 @@ export class CodeMain {
- 		// Lifecycle
- 		this.lifecycleMainService.ready();
- 
-+		// Initialize auto updater
-+		this.setupAutoUpdater();
-+
- 		// Set lifecycle phase to `Ready`
- 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
- 
-@@ -96,6 +101,58 @@ export class CodeMain {
- 		return this.instantiationService;
+ import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
+ import { ConfigurationService } from '../../platform/configuration/common/configurationService.js';
+ import { IDiagnosticsMainService } from '../../platform/diagnostics/electron-main/diagnosticsMainService.js';
+@@ -87,6 +89,8 @@
+ 	main(): void {
+ 		try {
+ 			this.startup();
++			// Initialize auto updater
++			this.setupAutoUpdater();
+ 		} catch (error) {
+ 			console.error(error.message);
+ 			app.exit(1);
+@@ -614,6 +618,59 @@
+ 		return segments.join(':');
  	}
  
 +	private setupAutoUpdater(): void {
@@ -29,7 +28,7 @@
 +		(autoUpdater.logger as any).transports.file.level = 'info';
 +		
 +		// Set update server URL
-+		const updateUrl = process.env.UPDATE_SERVER_URL || this.productService.updateUrl || 'http://localhost:3000';
++		const updateUrl = process.env.UPDATE_SERVER_URL || 'http://localhost:3000';
 +		autoUpdater.setFeedURL({
 +			provider: 'generic',
 +			url: updateUrl
@@ -67,7 +66,8 @@
 +		
 +		// Check for updates on startup (delayed to ensure app is fully loaded)
 +		setTimeout(() => {
-+			if (this.productService.quality !== 'development') {
++			// Only check for updates in production builds
++			if (process.env.NODE_ENV !== 'development') {
 +				autoUpdater.checkForUpdatesAndNotify().catch(err => {
 +					log.error('Failed to check for updates:', err);
 +				});
@@ -75,6 +75,6 @@
 +		}, 5000); // Delay 5 seconds to ensure app is fully started
 +	}
 +
- 	private dispose(): void {
+ 	//#endregion
+ }
  
- 		// Dispose of the application and main services

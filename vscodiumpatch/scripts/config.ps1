@@ -5,7 +5,7 @@
 
 # ===== 路径配置 =====
 # VSCode/VSCodium 源码路径（必须修改为你的实际路径）
-$VSCODE_SOURCE_PATH = "C:\path\to\vscode"
+VSCODE_SOURCE_PATH="../../vscode"
 
 # 补丁文件目录（相对于脚本目录，通常不需要修改）
 $PATCHES_DIR = "..\patches-vscodium"
@@ -15,7 +15,7 @@ $LOG_FILE = ".\integration.log"
 
 # ===== 更新服务器配置 =====
 # 更新服务器地址（修改为你的实际服务器地址）
-$UPDATE_SERVER_URL = "http://localhost:3000"
+$UPDATE_SERVER_URL = "http://192.168.0.3:3000"
 
 # ===== 版本配置 =====
 # 自定义版本号（留空则使用原版本号）
