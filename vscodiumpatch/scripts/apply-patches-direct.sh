@@ -3,6 +3,13 @@
 # VSCodium 补丁直接应用脚本 (不使用 git apply)
 # 使用直接文件操作方式应用补丁，避免行尾符问题
 # =============================================================================
+#
+# 重要说明 - 新的依赖处理机制:
+# 1. 此脚本会将 electron-updater 和 electron-log 依赖添加到 VSCode 源码的 package.json dependencies 中
+# 2. 这确保了在 VSCode 构建过程中，这些依赖会被正确打包到 resources/app/node_modules
+# 3. 解决了 "Named export 'autoUpdater' not found" 错误
+# 4. 不需要手动运行 npm install，构建过程会自动处理依赖安装
+# 5. integrate-vscodium.sh 中的 install_dependencies 函数是独立的，用于其他目的
 
 set -e
 
@@ -162,9 +169,9 @@ apply_package_json_code() {
     fi
 }
 
-# 检查并安装依赖
-install_dependencies() {
-    log "强制安装 electron-updater 和 electron-log 依赖..."
+# 确保依赖正确添加到package.json的dependencies中
+ensure_dependencies_in_package_json() {
+    log "确保 electron-updater 和 electron-log 依赖正确添加到 package.json..."
     local package_json="$VSCODE_SOURCE_PATH/package.json"
     
     if [[ ! -f "$package_json" ]]; then
@@ -172,40 +179,95 @@ install_dependencies() {
         return 1
     fi
     
-    # 检查依赖是否已添加到package.json
-    local has_electron_updater=$(grep -c '"electron-updater"' "$package_json" || echo "0")
-    local has_electron_log=$(grep -c '"electron-log"' "$package_json" || echo "0")
+    # 检查dependencies部分是否存在这两个依赖
+    local has_electron_updater=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-updater"' || echo "0")
+    local has_electron_log=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-log"' || echo "0")
     
-    if [[ "$has_electron_updater" -eq 0 ]] || [[ "$has_electron_log" -eq 0 ]]; then
-        log "❌ 错误: package.json 中缺少必要的依赖项"
-        log "   electron-updater: $([[ "$has_electron_updater" -gt 0 ]] && echo "✅" || echo "❌")"
-        log "   electron-log: $([[ "$has_electron_log" -gt 0 ]] && echo "✅" || echo "❌")"
-        return 1
+    local needs_update=false
+    
+    # 如果electron-updater不在dependencies中，添加它
+    if [[ "$has_electron_updater" -eq 0 ]]; then
+        log "添加 electron-updater 到 dependencies..."
+        # 使用更兼容的方式添加依赖
+        local temp_file="${package_json}.tmp"
+        awk '
+            /"dependencies": {/ {
+                print $0
+                print "    \"electron-updater\": \"^6.1.7\","
+                next
+            }
+            { print }
+        ' "$package_json" > "$temp_file" && mv "$temp_file" "$package_json"
+        needs_update=true
     fi
     
-    log "✅ package.json 依赖检查通过，开始强制安装指定版本的依赖..."
+    # 如果electron-log不在dependencies中，添加它
+    if [[ "$has_electron_log" -eq 0 ]]; then
+        log "添加 electron-log 到 dependencies..."
+        # 使用更兼容的方式添加依赖
+        local temp_file="${package_json}.tmp"
+        awk '
+            /"dependencies": {/ {
+                print $0
+                print "    \"electron-log\": \"^5.0.1\","
+                next
+            }
+            { print }
+        ' "$package_json" > "$temp_file" && mv "$temp_file" "$package_json"
+        needs_update=true
+    fi
+    
+    if [[ "$needs_update" == "true" ]]; then
+        log "✅ 依赖已添加到 package.json 的 dependencies 部分"
+        # 验证添加结果
+        local final_updater=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-updater"' || echo "0")
+        local final_log=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-log"' || echo "0")
+        
+        if [[ "$final_updater" -gt 0 ]] && [[ "$final_log" -gt 0 ]]; then
+            log "✅ 验证通过: 依赖已正确添加到 dependencies 部分"
+        else
+            log "❌ 验证失败: 依赖添加可能不成功"
+            return 1
+        fi
+    else
+        log "✅ 依赖已存在于 package.json 的 dependencies 部分"
+    fi
+    
+    return 0
+}
+
+# 检查并安装依赖（用于开发测试）
+install_dependencies_for_testing() {
+    log "为测试目的安装 electron-updater 和 electron-log 依赖..."
+    local package_json="$VSCODE_SOURCE_PATH/package.json"
+    
+    if [[ ! -f "$package_json" ]]; then
+        log "❌ 错误: package.json 不存在: $package_json"
+        return 1
+    fi
     
     # 切换到源码目录
     local current_dir=$(pwd)
     cd "$VSCODE_SOURCE_PATH"
     
-    # 强制安装指定版本的依赖
-    log "正在安装 electron-updater@^6.1.7 和 electron-log@^5.0.1..."
-    if npm install electron-updater@^6.1.7 electron-log@^5.0.1; then
-        log "✅ 依赖安装成功"
+    # 安装指定版本的依赖（仅用于测试验证）
+    log "正在安装 electron-updater@^6.1.7 和 electron-log@^5.0.1 用于测试..."
+    if npm install electron-updater@^6.1.7 electron-log@^5.0.1 --save; then
+        log "✅ 测试依赖安装成功"
         # 验证安装结果
         if [[ -d "node_modules/electron-updater" ]] && [[ -d "node_modules/electron-log" ]]; then
-            log "✅ 验证通过: electron-updater和electron-log已成功安装"
+            log "✅ 验证通过: electron-updater和electron-log已成功安装到node_modules"
         else
             log "⚠️  警告: 依赖安装可能不完整"
         fi
     else
-        log "❌ 依赖安装失败，请检查网络连接或手动运行: npm install electron-updater@^6.1.7 electron-log@^5.0.1"
+        log "❌ 测试依赖安装失败，请检查网络连接"
+        cd "$current_dir"
         return 1
     fi
     
     cd "$current_dir"
-    log "✅ 依赖安装完成"
+    log "✅ 测试依赖安装完成"
     return 0
 }
 
@@ -402,6 +464,55 @@ apply_main_ts_patch() {
     fi
 }
 
+# 测试依赖添加功能（仅用于验证）
+test_dependency_addition() {
+    log "=== 测试依赖添加功能 ==="
+    
+    if [[ -z "$VSCODE_SOURCE_PATH" ]]; then
+        log "❌ 错误: VSCODE_SOURCE_PATH 未设置"
+        return 1
+    fi
+    
+    local package_json="$VSCODE_SOURCE_PATH/package.json"
+    if [[ ! -f "$package_json" ]]; then
+        log "❌ 错误: package.json 不存在: $package_json"
+        return 1
+    fi
+    
+    # 备份原始文件
+    cp "$package_json" "${package_json}.backup"
+    log "✅ 已备份原始 package.json"
+    
+    # 测试依赖添加
+    if ensure_dependencies_in_package_json; then
+        log "✅ 依赖添加测试成功"
+        
+        # 显示添加的依赖
+        log "当前 dependencies 中的相关依赖:"
+        grep -A 50 '"dependencies"' "$package_json" | grep -E '"electron-(updater|log)"' || log "未找到相关依赖"
+        
+        # 询问是否恢复备份
+        echo "是否恢复原始 package.json? (y/n)"
+        read -r restore_backup
+        if [[ "$restore_backup" == "y" ]] || [[ "$restore_backup" == "Y" ]]; then
+            mv "${package_json}.backup" "$package_json"
+            log "✅ 已恢复原始 package.json"
+        else
+            rm "${package_json}.backup"
+            log "✅ 保留修改后的 package.json，已删除备份"
+        fi
+    else
+        log "❌ 依赖添加测试失败"
+        # 恢复备份
+        mv "${package_json}.backup" "$package_json"
+        log "✅ 已恢复原始 package.json"
+        return 1
+    fi
+    
+    log "=== 测试完成 ==="
+    return 0
+}
+
 # 主函数
 main() {
     log "=== VSCodium 补丁应用开始 (直接模式) ==="
@@ -435,15 +546,41 @@ main() {
     
     log "补丁应用完成: $success_count/3"
     
-    # 检查依赖安装情况
-    install_dependencies
+    # 确保依赖正确添加到package.json
+    if ! ensure_dependencies_in_package_json; then
+        log "❌ 依赖添加到package.json失败"
+        return 1
+    fi
+    
+    # 可选：为测试目的安装依赖（注释掉以避免在构建过程中执行）
+    # if ! install_dependencies_for_testing; then
+    #     log "❌ 测试依赖安装失败"
+    #     return 1
+    # fi
     
     log "=== VSCodium 补丁应用结束 ==="
 }
 
 # 运行主函数（如果直接执行脚本）
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
+    # 命令行参数处理
+    if [[ "$1" == "--test-deps" ]] || [[ "$1" == "-t" ]]; then
+        log "运行依赖添加测试模式..."
+        test_dependency_addition
+    else
+        # 执行主函数
+        main "$@"
+    fi
 fi
+
+# 使用说明:
+# 1. 正常模式: ./apply-patches-direct.sh
+#    - 应用所有补丁并添加依赖到 package.json
+#    - 适用于在 prepare_vscode.sh 中调用
+#
+# 2. 测试模式: ./apply-patches-direct.sh --test-deps
+#    - 仅测试依赖添加功能
+#    - 会备份并恢复 package.json
+#    - 用于验证脚本功能是否正常
 
 # 注意：此脚本设计为可以被source调用，执行完成后不会退出shell
