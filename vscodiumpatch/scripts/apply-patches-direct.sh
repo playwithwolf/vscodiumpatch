@@ -73,41 +73,41 @@ create_backup() {
     fi
 }
 
-# 应用 package.json 补丁
-apply_package_json_patch() {
-    log "应用 package.json 补丁..."
-    local package_json="$VSCODE_SOURCE_PATH/package.json"
-    local patch_file="$SCRIPT_DIR/../patches-vscodium/electron-updater-dependencies.patch"
+# # 应用 package.json 补丁
+# apply_package_json_patch() {
+#     log "应用 package.json 补丁..."
+#     local package_json="$VSCODE_SOURCE_PATH/package.json"
+#     local patch_file="$SCRIPT_DIR/../patches-vscodium/electron-updater-dependencies.patch"
     
-    if [[ ! -f "$package_json" ]]; then
-        log "❌ 错误: package.json 不存在: $package_json"
-        return 1
-    fi
+#     if [[ ! -f "$package_json" ]]; then
+#         log "❌ 错误: package.json 不存在: $package_json"
+#         return 1
+#     fi
     
-    if [[ ! -f "$patch_file" ]]; then
-        log "❌ 错误: 补丁文件不存在: $patch_file"
-        return 1
-    fi
+#     if [[ ! -f "$patch_file" ]]; then
+#         log "❌ 错误: 补丁文件不存在: $patch_file"
+#         return 1
+#     fi
     
-    # 检查是否已经应用过补丁
-    if grep -q '"electron-updater"' "$package_json"; then
-        log "⚠️  package.json 补丁已存在，跳过"
-        return 0
-    fi
+#     # 检查是否已经应用过补丁
+#     if grep -q '"electron-updater"' "$package_json"; then
+#         log "⚠️  package.json 补丁已存在，跳过"
+#         return 0
+#     fi
     
-    # 切换到源码目录并应用补丁
-    local current_dir=$(pwd)
-    cd "$VSCODE_SOURCE_PATH"
-    if patch -p1 --binary --ignore-whitespace < "$patch_file"; then
-        log "✅ package.json 补丁应用成功"
-        cd "$current_dir"
-        return 0
-    else
-        log "❌ package.json 补丁应用失败"
-        cd "$current_dir"
-        return 1
-    fi
-}
+#     # 切换到源码目录并应用补丁
+#     local current_dir=$(pwd)
+#     cd "$VSCODE_SOURCE_PATH"
+#     if patch -p1 --binary --ignore-whitespace < "$patch_file"; then
+#         log "✅ package.json 补丁应用成功"
+#         cd "$current_dir"
+#         return 0
+#     else
+#         log "❌ package.json 补丁应用失败"
+#         cd "$current_dir"
+#         return 1
+#     fi
+# }
 
 # 更新 package.json 中的 version 字段
 update_package_version() {
@@ -169,9 +169,9 @@ apply_package_json_code() {
     fi
 }
 
-# 确保依赖正确添加到package.json的dependencies中
+# 确保依赖强制添加到package.json的dependencies中
 ensure_dependencies_in_package_json() {
-    log "确保 electron-updater 和 electron-log 依赖正确添加到 package.json..."
+    log "强制确保 electron-updater 和 electron-log 依赖添加到 package.json 的 dependencies..."
     local package_json="$VSCODE_SOURCE_PATH/package.json"
     
     if [[ ! -f "$package_json" ]]; then
@@ -189,37 +189,53 @@ ensure_dependencies_in_package_json() {
     
     local needs_update=false
     
-    # 如果electron-updater不在dependencies中，添加它
-    if [[ "$has_electron_updater" -eq 0 ]]; then
-        log "添加 electron-updater 到 dependencies..."
-        # 使用更兼容的方式添加依赖
-        local temp_file="${package_json}.tmp"
-        awk '
-            /"dependencies": {/ {
-                print $0
-                print "    \"electron-updater\": \"^6.1.7\","
-                next
-            }
-            { print }
-        ' "$package_json" > "$temp_file" && mv "$temp_file" "$package_json"
-        needs_update=true
-    fi
+    log "注意: 如果依赖同时存在于 dependencies 中，这是允许的，不会移除"
     
-    # 如果electron-log不在dependencies中，添加它
-    if [[ "$has_electron_log" -eq 0 ]]; then
-        log "添加 electron-log 到 dependencies..."
-        # 使用更兼容的方式添加依赖
-        local temp_file="${package_json}.tmp"
-        awk '
-            /"dependencies": {/ {
-                print $0
-                print "    \"electron-log\": \"^5.0.1\","
-                next
-            }
-            { print }
-        ' "$package_json" > "$temp_file" && mv "$temp_file" "$package_json"
-        needs_update=true
-    fi
+    # 强制添加electron-updater到dependencies（无论是否已存在）
+    log "强制添加/更新 electron-updater 到 dependencies..."
+    local temp_file="${package_json}.tmp"
+    
+    # 先移除dependencies中可能存在的electron-updater（只在dependencies部分移除）
+     awk '
+         in_deps && /"electron-updater":/ { next }
+         /"dependencies": {/ { in_deps=1; print; next }
+         /^  },?$/ && in_deps { in_deps=0 }
+         { print }
+     ' "$package_json" > "${temp_file}.1"
+    
+    # 然后添加新的electron-updater到dependencies
+    awk '
+        /"dependencies": {/ {
+            print $0
+            print "    \"electron-updater\": \"^6.1.7\","
+            next
+        }
+        { print }
+    ' "${temp_file}.1" > "$temp_file" && mv "$temp_file" "$package_json"
+    rm -f "${temp_file}.1"
+    needs_update=true
+    
+    # 强制添加electron-log到dependencies（无论是否已存在）
+    log "强制添加/更新 electron-log 到 dependencies..."
+    
+    # 先移除dependencies中可能存在的electron-log（只在dependencies部分移除）
+     awk '
+         in_deps && /"electron-log":/ { next }
+         /"dependencies": {/ { in_deps=1; print; next }
+         /^  },?$/ && in_deps { in_deps=0 }
+         { print }
+     ' "$package_json" > "${temp_file}.1"
+    
+    # 然后添加新的electron-log到dependencies
+    awk '
+        /"dependencies": {/ {
+            print $0
+            print "    \"electron-log\": \"^5.0.1\","
+            next
+        }
+        { print }
+    ' "${temp_file}.1" > "$temp_file" && mv "$temp_file" "$package_json"
+     rm -f "${temp_file}.1"
     
     if [[ "$needs_update" == "true" ]]; then
         log "✅ 依赖已添加到 package.json 的 dependencies 部分"
@@ -276,40 +292,40 @@ install_dependencies_for_testing() {
 }
 
 # 应用 product.json 补丁
-apply_product_json_patch() {
-    log "应用 product.json 补丁..."
-    local product_json="$VSCODE_SOURCE_PATH/product.json"
-    local patch_file="$SCRIPT_DIR/../patches-vscodium/electron-updater-product-config.patch"
+# apply_product_json_patch() {
+#     log "应用 product.json 补丁..."
+#     local product_json="$VSCODE_SOURCE_PATH/product.json"
+#     local patch_file="$SCRIPT_DIR/../patches-vscodium/electron-updater-product-config.patch"
     
-    if [[ ! -f "$product_json" ]]; then
-        log "❌ 错误: product.json 不存在: $product_json"
-        return 1
-    fi
+#     if [[ ! -f "$product_json" ]]; then
+#         log "❌ 错误: product.json 不存在: $product_json"
+#         return 1
+#     fi
     
-    if [[ ! -f "$patch_file" ]]; then
-        log "❌ 错误: 补丁文件不存在: $patch_file"
-        return 1
-    fi
+#     if [[ ! -f "$patch_file" ]]; then
+#         log "❌ 错误: 补丁文件不存在: $patch_file"
+#         return 1
+#     fi
     
-    # 检查是否已经应用了我们的updateUrl配置
-    if grep -q '"updateUrl": "http://192.168.0.3:3000"' "$product_json"; then
-        log "⚠️  product.json 补丁已存在，跳过"
-        return 0
-    fi
+#     # 检查是否已经应用了我们的updateUrl配置
+#     if grep -q '"updateUrl": "http://192.168.0.3:3000"' "$product_json"; then
+#         log "⚠️  product.json 补丁已存在，跳过"
+#         return 0
+#     fi
     
-    # 切换到源码目录并应用补丁
-    local current_dir=$(pwd)
-    cd "$VSCODE_SOURCE_PATH"
-    if patch -p1 --binary --ignore-whitespace < "$patch_file"; then
-        log "✅ product.json 补丁应用成功"
-        cd "$current_dir"
-        return 0
-    else
-        log "❌ product.json 补丁应用失败"
-        cd "$current_dir"
-        return 1
-    fi
-}
+#     # 切换到源码目录并应用补丁
+#     local current_dir=$(pwd)
+#     cd "$VSCODE_SOURCE_PATH"
+#     if patch -p1 --binary --ignore-whitespace < "$patch_file"; then
+#         log "✅ product.json 补丁应用成功"
+#         cd "$current_dir"
+#         return 0
+#     else
+#         log "❌ product.json 补丁应用失败"
+#         cd "$current_dir"
+#         return 1
+#     fi
+# }
 
 # 硬编码方式应用 main.ts 和 product.json 修改
 apply_product_json_code() {
@@ -327,13 +343,13 @@ apply_product_json_code() {
         return 1
     fi
     
-    # 检查是否已经添加了electron-updater导入
-    if grep -q "import { autoUpdater } from 'electron-updater';" "$main_ts"; then
-        log "⚠️  main.ts 已包含 electron-updater 代码，跳过main.ts修改"
-    else
-        log "开始修改 main.ts 文件..."
-        # main.ts修改逻辑保持不变
-    fi
+    # # 检查是否已经添加了electron-updater导入
+    # if grep -q "import { autoUpdater } from 'electron-updater';" "$main_ts"; then
+    #     log "⚠️  main.ts 已包含 electron-updater 代码，跳过main.ts修改"
+    # else
+    #     log "开始修改 main.ts 文件..."
+    #     # main.ts修改逻辑保持不变
+    # fi
     
     # 检查并更新product.json中的updateUrl
     if grep -q '"updateUrl": "http://192.168.0.3:3000"' "$product_json"; then
@@ -350,11 +366,11 @@ apply_product_json_code() {
         fi
     fi
     
-    # 如果main.ts已经修改过，直接返回成功
-    if grep -q "import { autoUpdater } from 'electron-updater';" "$main_ts"; then
-        log "✅ 所有修改完成"
-        return 0
-    fi
+    # # 如果main.ts已经修改过，直接返回成功
+    # if grep -q "import { autoUpdater } from 'electron-updater';" "$main_ts"; then
+    #     log "✅ 所有修改完成"
+    #     return 0
+    # fi
     
     # 创建临时文件
     local temp_file="$main_ts.tmp"
@@ -435,38 +451,38 @@ import type { UpdateInfo, ProgressInfo } from '"'"'electron-updater'"'"';' "$mai
 }
 
 # 应用 main.ts 补丁
-apply_main_ts_patch() {
-    log "应用 main.ts 补丁..."
-    local main_ts="$VSCODE_SOURCE_PATH/src/vs/code/electron-main/main.ts"
-    local patch_file="../patches-vscodium/electron-updater-main-process.patch"
+# apply_main_ts_patch() {
+#     log "应用 main.ts 补丁..."
+#     local main_ts="$VSCODE_SOURCE_PATH/src/vs/code/electron-main/main.ts"
+#     local patch_file="../patches-vscodium/electron-updater-main-process.patch"
     
-    if [[ ! -f "$main_ts" ]]; then
-        log "❌ 错误: main.ts 不存在: $main_ts"
-        return 1
-    fi
+#     if [[ ! -f "$main_ts" ]]; then
+#         log "❌ 错误: main.ts 不存在: $main_ts"
+#         return 1
+#     fi
     
-    if [[ ! -f "$patch_file" ]]; then
-        log "❌ 错误: 补丁文件不存在: $patch_file"
-        return 1
-    fi
+#     if [[ ! -f "$patch_file" ]]; then
+#         log "❌ 错误: 补丁文件不存在: $patch_file"
+#         return 1
+#     fi
     
-    # 检查是否已经应用过补丁
-    if grep -q 'electron-updater' "$main_ts"; then
-        log "⚠️  main.ts 补丁已存在，跳过"
-        return 0
-    fi
+#     # 检查是否已经应用过补丁
+#     if grep -q 'electron-updater' "$main_ts"; then
+#         log "⚠️  main.ts 补丁已存在，跳过"
+#         return 0
+#     fi
     
-    # 应用补丁
-    local current_dir=$(pwd)
-    local absolute_patch_file="$current_dir/$patch_file"
-    cd "$VSCODE_SOURCE_PATH"
-    if patch -p1 --binary -i "$absolute_patch_file"; then
-        log "✅ main.ts 补丁应用成功"
-    else
-        log "❌ main.ts 补丁应用失败"
-        return 1
-    fi
-}
+#     # 应用补丁
+#     local current_dir=$(pwd)
+#     local absolute_patch_file="$current_dir/$patch_file"
+#     cd "$VSCODE_SOURCE_PATH"
+#     if patch -p1 --binary -i "$absolute_patch_file"; then
+#         log "✅ main.ts 补丁应用成功"
+#     else
+#         log "❌ main.ts 补丁应用失败"
+#         return 1
+#     fi
+# }
 
 # 测试依赖添加功能（仅用于验证）
 test_dependency_addition() {
@@ -544,11 +560,11 @@ main() {
         success_count=$((success_count + 1))
     fi
     
-    if apply_main_ts_patch; then
-        success_count=$((success_count + 1))
-    fi
+    # if apply_main_ts_patch; then
+    #     success_count=$((success_count + 1))
+    # fi
     
-    log "补丁应用完成: $success_count/3"
+    log "补丁应用完成: $success_count/2"
     
     # 确保依赖正确添加到package.json
     if ! ensure_dependencies_in_package_json; then
