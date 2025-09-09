@@ -180,8 +180,12 @@ ensure_dependencies_in_package_json() {
     fi
     
     # 检查dependencies部分是否存在这两个依赖
-    local has_electron_updater=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-updater"' || echo "0")
-    local has_electron_log=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-log"' || echo "0")
+    local has_electron_updater
+    has_electron_updater=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-updater"' 2>/dev/null || echo "0")
+    has_electron_updater=$(echo "$has_electron_updater" | tr -d '\n\r ')
+    local has_electron_log
+    has_electron_log=$(grep -A 50 '"dependencies"' "$package_json" | grep -c '"electron-log"' 2>/dev/null || echo "0")
+    has_electron_log=$(echo "$has_electron_log" | tr -d '\n\r ')
     
     local needs_update=false
     
@@ -552,11 +556,10 @@ main() {
         return 1
     fi
     
-    # 可选：为测试目的安装依赖（注释掉以避免在构建过程中执行）
-    # if ! install_dependencies_for_testing; then
-    #     log "❌ 测试依赖安装失败"
-    #     return 1
-    # fi
+    # 安装依赖以确保编译成功（可选，失败不影响补丁应用）
+    if ! install_dependencies_for_testing; then
+        log "⚠️  依赖安装失败，但补丁已成功应用。可以稍后手动安装依赖或在构建时自动安装。"
+    fi
     
     log "=== VSCodium 补丁应用结束 ==="
 }
