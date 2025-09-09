@@ -352,14 +352,14 @@ apply_product_json_code() {
     # fi
     
     # 检查并更新product.json中的updateUrl
-    if grep -q '"updateUrl": "http://192.168.0.3:3000"' "$product_json"; then
+    if grep -q "\"updateUrl\": \"${UPDATE_SERVER_URL}\"" "$product_json"; then
         log "⚠️  product.json updateUrl 已更新，跳过product.json修改"
     else
         log "开始修改 product.json 文件..."
-        # 使用sed替换updateUrl
-        sed -i 's|"updateUrl": "https://raw.githubusercontent.com/VSCodium/versions/refs/heads/master"|"updateUrl": "http://192.168.0.3:3000"|g' "$product_json"
-        if grep -q '"updateUrl": "http://192.168.0.3:3000"' "$product_json"; then
-            log "✅ product.json updateUrl 更新成功"
+        # 使用sed替换updateUrl，使用配置变量
+        sed -i "s|\"updateUrl\": \"https://raw.githubusercontent.com/VSCodium/versions/refs/heads/master\"|\"updateUrl\": \"${UPDATE_SERVER_URL}\"|g" "$product_json"
+        if grep -q "\"updateUrl\": \"${UPDATE_SERVER_URL}\"" "$product_json"; then
+            log "✅ product.json updateUrl 更新成功: ${UPDATE_SERVER_URL}"
         else
             log "❌ product.json updateUrl 更新失败"
             return 1
@@ -382,9 +382,10 @@ const { autoUpdater } = electronUpdater;\
 import * as log from '"'"'electron-log'"'"';\
 import type { UpdateInfo, ProgressInfo } from '"'"'electron-updater'"'"';' "$main_ts" > "$temp_file"
     
-    # 在main()方法中添加setupAutoUpdater调用
-    sed -i '/this\.startup();/a\			// Initialize auto updater\
-			this.setupAutoUpdater();' "$temp_file"
+    # 不在main()方法中调用setupAutoUpdater，而是在startup()方法内部调用
+    # 在startup()方法内部的适当位置添加setupAutoUpdater调用
+    sed -i '/return instantiationService.createInstance(CodeApplication, mainProcessNodeIpcServer, instanceEnvironment).startup();/i\
+				// Initialize auto updater after app is fully loaded\n				this.setupAutoUpdater();\n' "$temp_file"
     
     # 在类的末尾添加setupAutoUpdater方法
     sed -i '/\/\/#endregion/i\
@@ -396,7 +397,7 @@ import type { UpdateInfo, ProgressInfo } from '"'"'electron-updater'"'"';' "$mai
 		// Set update server URL\
 		autoUpdater.setFeedURL({\
 			provider: '"'"'generic'"'"',\
-			url: '"'"'http://192.168.0.3:3000'"'"'\
+			url: '"'"$UPDATE_SERVER_URL"'"'\
 		});\
 		\
 		autoUpdater.on('"'"'checking-for-update'"'"', () => {\
