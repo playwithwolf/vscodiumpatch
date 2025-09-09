@@ -378,7 +378,7 @@ apply_product_json_code() {
     # 添加导入语句
     sed '/import { localize } from/a\
 import electronUpdater from '"'"'electron-updater'"'"';\
-import { autoUpdater } = electronUpdater;\
+const { autoUpdater } = electronUpdater;\
 import * as log from '"'"'electron-log'"'"';\
 import type { UpdateInfo, ProgressInfo } from '"'"'electron-updater'"'"';' "$main_ts" > "$temp_file"
     
