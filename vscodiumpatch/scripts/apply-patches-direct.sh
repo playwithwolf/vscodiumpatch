@@ -332,6 +332,7 @@ apply_product_json_code() {
     log "硬编码方式修改 main.ts 和 product.json 文件..."
     local main_ts="$VSCODE_SOURCE_PATH/src/vs/code/electron-main/main.ts"
     local product_json="$VSCODE_SOURCE_PATH/product.json"
+    local setup_code_file="$SCRIPT_DIR/setup_auto_updater.ts"
     
     if [[ ! -f "$main_ts" ]]; then
         log "❌ 错误: main.ts 不存在: $main_ts"
@@ -343,13 +344,10 @@ apply_product_json_code() {
         return 1
     fi
     
-    # # 检查是否已经添加了electron-updater导入
-    # if grep -q "import { autoUpdater } from 'electron-updater';" "$main_ts"; then
-    #     log "⚠️  main.ts 已包含 electron-updater 代码，跳过main.ts修改"
-    # else
-    #     log "开始修改 main.ts 文件..."
-    #     # main.ts修改逻辑保持不变
-    # fi
+    if [[ ! -f "$setup_code_file" ]]; then
+        log "❌ 错误: setup_auto_updater.ts 不存在: $setup_code_file"
+        return 1
+    fi
     
     # 检查并更新product.json中的updateUrl
     if grep -q "\"updateUrl\": \"${UPDATE_SERVER_URL}\"" "$product_json"; then
@@ -366,14 +364,18 @@ apply_product_json_code() {
         fi
     fi
     
-    # # 如果main.ts已经修改过，直接返回成功
-    # if grep -q "import { autoUpdater } from 'electron-updater';" "$main_ts"; then
-    #     log "✅ 所有修改完成"
-    #     return 0
-    # fi
+    # 检查是否已经添加了electron-updater导入
+    if grep -q "import electronUpdater from 'electron-updater'" "$main_ts"; then
+        log "⚠️  main.ts 已包含 electron-updater 代码，跳过main.ts修改"
+        return 0
+    fi
     
     # 创建临时文件
     local temp_file="$main_ts.tmp"
+    
+    # 读取setup代码并替换占位符
+    local setup_code
+    setup_code=$(cat "$setup_code_file" | sed "s|UPDATE_SERVER_URL_PLACEHOLDER|${UPDATE_SERVER_URL}|g")
     
     # 添加导入语句
     sed '/import { localize } from/a\
@@ -382,64 +384,26 @@ const { autoUpdater } = electronUpdater;\
 import * as log from '"'"'electron-log'"'"';\
 import type { UpdateInfo, ProgressInfo } from '"'"'electron-updater'"'"';' "$main_ts" > "$temp_file"
     
-    # 不在main()方法中调用setupAutoUpdater，而是在startup()方法内部调用
-    # 在startup()方法内部的适当位置添加setupAutoUpdater调用
+    # 在startup()方法内部添加setupAutoUpdater调用
     sed -i '/return instantiationService.createInstance(CodeApplication, mainProcessNodeIpcServer, instanceEnvironment).startup();/i\
 				// Initialize auto updater after app is fully loaded\n				this.setupAutoUpdater();\n' "$temp_file"
     
-    # 在类的末尾添加setupAutoUpdater方法
-    sed -i '/\/\/#endregion/i\
-	private setupAutoUpdater(): void {\
-		// Configure electron-log for auto-updater\
-		log.transports.file.level = '"'"'info'"'"';\
-		autoUpdater.logger = log;\
-		\
-		// Set update server URL\
-		autoUpdater.setFeedURL({\
-			provider: '"'"'generic'"'"',\
-			url: '"'"$UPDATE_SERVER_URL"'"'\
-		});\
-		\
-		autoUpdater.on('"'"'checking-for-update'"'"', () => {\
-			log.info('"'"'Checking for updates...'"'"');\
-		});\
-		\
-		autoUpdater.on('"'"'update-available'"'"', (info: UpdateInfo) => {\
-			log.info('"'"'Update available:'"'"', info.version);\
-		});\
-		\
-		autoUpdater.on('"'"'update-not-available'"'"', (info: UpdateInfo) => {\
-			log.info('"'"'Update not available, current version:'"'"', info.version);\
-		});\
-		\
-		autoUpdater.on('"'"'error'"'"', (err: Error) => {\
-			log.error('"'"'Auto updater error:'"'"', err);\
-		});\
-		\
-		autoUpdater.on('"'"'download-progress'"'"', (progressObj: ProgressInfo) => {\
-			let logMessage = `Download speed: ${progressObj.bytesPerSecond}`;\
-			logMessage += ` - Downloaded ${progressObj.percent}%`;\
-			logMessage += ` (${progressObj.transferred}/${progressObj.total})`;\
-			log.info(logMessage);\
-		});\
-		\
-		autoUpdater.on('"'"'update-downloaded'"'"', (info: UpdateInfo) => {\
-			log.info('"'"'Update downloaded, ready to install:'"'"', info.version);\
-			// You can show notification or dialog here\
-			// autoUpdater.quitAndInstall();\
-		});\
-		\
-		// Check for updates on startup (delayed to ensure app is fully loaded)\
-		setTimeout(() => {\
-			// Only check for updates in production builds\
-			if (process.env.NODE_ENV !== '"'"'development'"'"') {\
-				autoUpdater.checkForUpdatesAndNotify().catch((err: Error) => {\
-					log.error('"'"'Failed to check for updates:'"'"', err);\
-				});\
-			}\
-		}, 5000); // Delay 5 seconds to ensure app is fully started\
-	}\
-' "$temp_file"
+    # 在类的末尾添加setupAutoUpdater方法（从文件读取）
+    # 先找到//#endregion的行号
+    local endregion_line
+    endregion_line=$(grep -n "//#endregion" "$temp_file" | tail -1 | cut -d: -f1)
+    
+    if [[ -n "$endregion_line" ]]; then
+        # 在//#endregion之前插入setup代码
+        head -n $((endregion_line - 1)) "$temp_file" > "${temp_file}.part1"
+        echo "$setup_code" >> "${temp_file}.part1"
+        tail -n +$endregion_line "$temp_file" >> "${temp_file}.part1"
+        mv "${temp_file}.part1" "$temp_file"
+    else
+        log "❌ 未找到 //#endregion 标记"
+        rm -f "$temp_file"
+        return 1
+    fi
     
     # 替换原文件
     if mv "$temp_file" "$main_ts"; then
