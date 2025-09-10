@@ -13,6 +13,17 @@ private setupAutoUpdater(): void {
 		// Bypass SSL certificate validation for development/testing
 		process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 		log.info('SSL certificate validation disabled for auto-updater');
+
+		app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+            if (url.startsWith('UPDATE_SERVER_URL_PLACEHOLDER')) {
+                event.preventDefault();
+                callback(true); // Ignore certificate error for this URL
+                log.warn(`Ignored certificate error for URL: ${url}`);
+            } else {
+                callback(false);
+            }
+        });
+		
 		
 		// Set update server URL with error handling
 		try {
