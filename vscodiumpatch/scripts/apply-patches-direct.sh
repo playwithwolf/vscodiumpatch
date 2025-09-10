@@ -272,7 +272,7 @@ install_dependencies_for_testing() {
     
     # 安装指定版本的依赖（仅用于测试验证）
     log "正在安装 electron-updater@^6.1.7 和 electron-log@^5.0.1 用于测试..."
-    if npm install electron-updater@^6.1.7 electron-log@^5.0.1 --save; then
+    if npm install electron-updater@^6.1.7 electron-log@^5.0.1 --save-prod; then
         log "✅ 测试依赖安装成功"
         # 验证安装结果
         if [[ -d "node_modules/electron-updater" ]] && [[ -d "node_modules/electron-log" ]]; then
