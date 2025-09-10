@@ -381,7 +381,7 @@ apply_product_json_code() {
     sed '/import { localize } from/a\
 import electronUpdater from '"'"'electron-updater'"'"';\
 const { autoUpdater } = electronUpdater;\
-import * as log from '"'"'electron-log'"'"';\
+import log from '"'"'electron-log'"'"';\
 import type { UpdateInfo, ProgressInfo } from '"'"'electron-updater'"'"';' "$main_ts" > "$temp_file"
     
     # 在startup()方法内部添加setupAutoUpdater调用
