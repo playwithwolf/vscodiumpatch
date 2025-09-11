@@ -67,6 +67,10 @@ private setupAutoUpdater(): void {
 			// autoUpdater.quitAndInstall();
 		});
 		
+		// Disable differential downloads (NSIS only - always perform full download)
+		autoUpdater.disableDifferentialDownload = true;
+		log.info('Differential downloads disabled - will always perform full download');
+		
 		// Check for updates on startup (delayed to ensure app is fully loaded)
 		setTimeout(async () => {
 			try {
