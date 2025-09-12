@@ -143,6 +143,40 @@ update_package_version() {
     fi
 }
 
+# 同步 app-update.yml 版本号
+update_app_update_yml_version() {
+    log "同步 app-update.yml 版本号..."
+    local app_update_yml="$SCRIPT_DIR/../../app-update.yml"
+    local custom_version="$CUSTOM_VERSION"
+    
+    # 如果没有设置自定义版本，跳过版本更新
+    if [[ -z "$custom_version" ]]; then
+        log "未设置 CUSTOM_VERSION，跳过 app-update.yml 版本更新"
+        return 0
+    fi
+    
+    if [[ ! -f "$app_update_yml" ]]; then
+        log "⚠️  警告: app-update.yml 不存在: $app_update_yml，跳过版本同步"
+        return 0
+    fi
+    
+    # 检查是否已经是目标版本
+    if grep -q "version: $custom_version" "$app_update_yml"; then
+        log "⚠️  app-update.yml 版本已是 $custom_version，跳过"
+        return 0
+    fi
+    
+    # 使用 sed 替换 version 字段
+    if sed -i.tmp "s/version: .*/version: $custom_version/g" "$app_update_yml"; then
+        rm -f "$app_update_yml.tmp" 2>/dev/null || true
+        log "✅ app-update.yml 版本同步成功: $custom_version"
+        return 0
+    else
+        log "❌ app-update.yml 版本同步失败"
+        return 1
+    fi
+}
+
 # 硬编码方式添加 package.json 依赖
 apply_package_json_code() {
     log "硬编码方式添加 package.json 依赖..."
@@ -521,6 +555,9 @@ main() {
     
     # 更新 package.json 版本号
     update_package_version
+    
+    # 同步 app-update.yml 版本号
+    update_app_update_yml_version
     
     if apply_product_json_code; then
         success_count=$((success_count + 1))
